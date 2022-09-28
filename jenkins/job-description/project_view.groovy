@@ -1,8 +1,8 @@
  
-listView('project Jobs') {
-    description('project Jobs')
+listView('PROJECT Jobs') {
+    description('PROJECT Jobs')
     jobs {
-        regex('project_.+')
+        regex('PROJECT_.+')
     }
     columns {
         status()
