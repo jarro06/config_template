@@ -1,19 +1,18 @@
-    
 def config = [:]
 
 def srvconf = new data.config_server()
 def srv_config = srvconf.get("${JENKINS_URL}")
 def job_config = [
-    job: [
-        name: "project_Pipeline_develop"
-    ],
-    git: [ 
-        branch: "develop"
-    ]
+        job: [
+                name: "PROJECT_Pipeline_develop"
+        ],
+        git: [
+                branch: "develop"
+        ]
 ]
 
 
-def gConfig = utilities.Tools.mergeMap(job_config, srv_config )
+def gConfig = utilities.Tools.mergeMap(job_config, srv_config)
 
 
 def scripts = """
@@ -21,13 +20,19 @@ def lib = library identifier: 'BizDevOps_JSL@develop', retriever: modernSCM(
   [\$class: 'GitSCMSource',
    remote: 'https://github.developer.allianz.io/JEQP/BizDevOps-JSL.git',
    credentialsId: 'git-token-credentials']) 
- 
+
+def customLib = library identifier: 'PROJECT_JSL@develop', retriever: modernSCM(
+  [\$class: 'GitSCMSource',
+   remote: 'https://github.developer.allianz.io/ORGANISATION/PROJECT_lib.git',
+   credentialsId: 'git-token-credentials']) 
+   
 def config = ${utilities.Tools.formatMap(gConfig)}
 
 def jslGeneral    = lib.de.allianz.bdo.pipeline.JSLGeneral.new()
 def jslGit        = lib.de.allianz.bdo.pipeline.JSLGit.new()
-def jslMaven      = lib.de.allianz.bdo.pipeline.JSLMaven.new()
 def jslGhe        = lib.de.allianz.bdo.pipeline.JSLGhe.new()
+
+def jslCustom     = lib.de.allianz.PROJECT.new()
 
 def manual_commit_sha
 
@@ -49,7 +54,7 @@ pipeline {
             steps {
                 echo "checkout"
                 script {
-                    jslGit.checkout( config, "JEQP", "project_Pipeline_develop", "develop")
+                    jslGit.checkout( config, "JEQP", "PROJECT_Pipeline_develop", "develop")
                 }
             }    
         }
@@ -57,8 +62,64 @@ pipeline {
             steps {
                 echo "Build"
                 script {
-                    dir ("project") {
-                        jslMaven.build()
+                    dir ("PROJECT") {
+                        jslCustom.build()
+                    }
+                }
+            }    
+        }
+
+        stage('Component Tests') {
+            steps {
+                echo "Component Tests"
+                script {
+                    dir ("PROJECT") {
+                        jslCustom.componentTest()
+                    }
+                }
+            }    
+        }
+
+        stage('Integration Tests') {
+            steps {
+                echo "Integration Tests"
+                script {
+                    dir ("PROJECT") {
+                        jslCustom.integrationTest()
+                    }
+                }
+            }    
+        }
+
+
+        stage('UAT Tests') {
+            steps {
+                echo "UAT Tests"
+                script {
+                    dir ("PROJECT") {
+                        jslCustom.uatTest()
+                    }
+                }
+            }    
+        }
+
+        stage('Acceptance Tests') {
+            steps {
+                echo "Acceptance Tests"
+                script {
+                    dir ("PROJECT") {
+                        jslCustom.acceptanceTest()
+                    }
+                }
+            }    
+        }
+
+        stage('Publish Artifacts') {
+            steps {
+                echo "Publish Artifacts"
+                script {
+                    dir ("PROJECT") {
+                        jslCustom.publishArtifacts()
                     }
                 }
             }    
@@ -67,7 +128,7 @@ pipeline {
             steps {
                 echo "Publish Results"
                 script {
-                    dir ("project") {
+                    dir ("PROJECT") {
                         junit allowEmptyResults: true, testResults: '**/surefire-reports/TEST-*.xml'
                     }
                 }
@@ -76,14 +137,14 @@ pipeline {
     }
 }
 """
-        
-def job = pipelineJob("${gConfig.job.name}");
+
+def job = pipelineJob("${gConfig.job.name}")
 
 job.with {
 
     definition {
-        cps { 
+        cps {
             script(scripts)
         }
-    } 
+    }
 }  
