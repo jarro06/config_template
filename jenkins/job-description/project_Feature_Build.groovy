@@ -5,7 +5,7 @@ def srvconf = new data.config_server()
 def srv_config = srvconf.get("\${JENKINS_URL}")
 def job_config = [
     job: [
-        name: "project_Feature_Build"
+        name: "PROJECT_Feature_Build"
     ],
     git: [ 
         branch: "develop"
@@ -153,7 +153,7 @@ job.with {
                 //                        regexpFilter("")
                 //                    }
                 //                }
-                token('SEFROCKS')
+                token('JENKINS_AUTH_TOKEN')
                 printContributedVariables(true)
                 printPostContent(true)
                 silentResponse(false)
