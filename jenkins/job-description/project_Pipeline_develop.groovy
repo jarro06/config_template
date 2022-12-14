@@ -32,7 +32,7 @@ def jslGeneral    = lib.de.allianz.bdo.pipeline.JSLGeneral.new()
 def jslGit        = lib.de.allianz.bdo.pipeline.JSLGit.new()
 def jslGhe        = lib.de.allianz.bdo.pipeline.JSLGhe.new()
 
-def jslCustom     = customLib.de.allianz.PROJECT.new()
+def jslCustom     = customLib.de.allianz.CAMEL_CASE_PROJECT.new()
 
 def manual_commit_sha
 
