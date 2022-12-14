@@ -1,171 +1,125 @@
-    
-def config = [:]
+def scripts = """
 
-def srvconf = new data.config_server()
-def srv_config = srvconf.get("\${JENKINS_URL}")
 def job_config = [
     job: [
-        name: "PROJECT_Feature_Build"
-    ],
-    git: [ 
-        branch: "develop"
+        name: "PROJECT_Feature_Build",
+        agent: "maven"
     ]
 ]
-
-
-def gConfig = utilities.Tools.mergeMap(job_config, srv_config )
-
-
-def scripts = """
-def lib = library identifier: 'BizDevOps_JSL@develop', retriever: modernSCM(
+def config = [
+    git: [
+         protocol: "https",
+         server: "github.developer.allianz.io",
+         credentialsId: "git-token-credentials"
+     ]
+]
+ghe: [
+        //commitMsgPattern: '/[A-Z]{2,10}-[0-9]+:.*/',
+        commitMsgPattern: '.*',
+        apiUrl: 'https://github.developer.allianz.io/api/v3',
+        GitGroup: 'ORGANIZATION',
+        RepoName: 'PROJECT',
+        checks: [
+           // [name: "di/base-branch-validation", description: "requested (or skipped if previous failed)"],
+            [name: "scm/commit-validation", description: "requested (or skipped if previous failed)", type: "commit_validation"],
+            [name: "scm/pr-validation",description: "requested (or skipped if previous failed)", type: "prname_validation"]
+           // [name: "scm/branchname-validation",description: "requested (or skipped if previous failed)", type: "branchname_validation"],
+            //[name: "di/target-branch-validation",description: "requested (or skipped if previous failed)", type: "commit_validation"]
+           // [name: "di/checkout-and-merge",description: "requested (or skipped if previous failed)", type: "commit_validation"],
+            //[name: "di/merge-ready",description: "requested (or skipped if previous failed)", type: "commit_validation"]
+        ]
+    ]
+           
+def lib = library identifier: 'BizDevOps_JSL@develop', retriever: modernSCM( 
   [\$class: 'GitSCMSource',
-   remote: 'https://github.developer.allianz.io/JEQP/BizDevOps-JSL.git',
+  remote: 'https://github.developer.allianz.io/JEQP/BizDevOps-JSL.git',
+  credentialsId: 'git-token-credentials']) 
+  
+def customLib = library identifier: 'PROJECT_JSL@develop', retriever: modernSCM(
+  [\$class: 'GitSCMSource',
+   remote: 'https://github.developer.allianz.io/ORGANIZATION/PROJECT_lib.git',
    credentialsId: 'git-token-credentials']) 
- 
-def config = ${utilities.Tools.formatMap(gConfig)}
 
 def jslGeneral    = lib.de.allianz.bdo.pipeline.JSLGeneral.new()
 def jslGit        = lib.de.allianz.bdo.pipeline.JSLGit.new()
 def jslMaven      = lib.de.allianz.bdo.pipeline.JSLMaven.new()
 def jslGhe        = lib.de.allianz.bdo.pipeline.JSLGhe.new()
 
+def jslCustom     = customLib.de.allianz.PROJECT.new()
+
+def jslAppGeneral = customLib.de.allianz.app.BuildGeneral.new()
+
 def manual_commit_sha
 
+def bff = false
+def fe = false
+
+jslGhe.getAllChangeDirsInPullRequest(config, pr_number).each() {
+                    if (it.equals('workbench-bff')) bff = true
+                    if (it.equals('workbench-fe')) fe = true  
+                }
+
 // for questions about this job ask mario akermann/tobias pfeifer from team pipeline
-
 pipeline {
-    agent { label "\${config.job.agent}" }
-
+    agent { label job_config.job.agent }
     stages {
     stage('Prepare') {
       steps {
         echo "prepare checkout"
         script {
           jslGeneral.clean()
-          // for all build via pull-request, the branch name is not filled
-          if(branch_name.isEmpty()) {
-            // build pull-request
-            jslAbs.buildPullRequest(config, pr_number, commit_sha)
-          // for all manual builds, the branch name is filled
-          } else {
-            // this is the part for the manual parameters - its documented on confluence
-            def profiles = [:]
-            if(common.toBoolean()) {
-              echo "add common to buildMap"
-              profiles['common'] = ["common"]
-            }
-            if(common_client.toBoolean()) {
-              echo "add common,client to buildMap"
-              profiles['common_client'] = ["common,client"]
-            }
-            if(common_web.toBoolean()) {
-              profiles['common_web'] = ["common,web"]
-              echo "add common, web to buildMap"
-            }
-            if(common_test.toBoolean()) {
-              profiles['common_test'] = ["common,test"]
-              echo "add common, test to buildMap"
-            }
-            if(client.toBoolean()) {
-              profiles['client'] = "client"
-              echo "add client to buildMap"
-            }
-            if(client_test.toBoolean()) {
-              profiles['client_test'] = ["client,test"]
-              echo "add client,test to buildMap"
-            }
-            // build branch
-            jslAbs.buildBranch(config, branch_name, profiles, run_unit_tests)
+          echo "action: \${action} pr_number: \${pr_number}"
+                    jslGhe.getAllChangeDirsInPullRequest(config, pr_number).each() {
+                        if (it.equals('workbench-bff')) bff = true
+                        if (it.equals('workbench-fe')) fe = true  
+                    }
+                    jslAppGeneral.prep(config,commit_sha)
+                    jslAppGeneral.build(config, commit_sha,commits_url,pr_title)
+          jslGit.checkout( config, "ORGANIZATION", "PROJECT", branch_name)
           }
         }
       }
-    }
+stage('Build') {
+            steps {
+                echo "Build"
+                script {
+                      jslCustom.build()
+                }
+            }    
+        }
+        stage('Component Tests') {
+            steps {
+                echo "Component Tests"
+                script {
+                    jslCustom.componentTest()
+                }
+            }    
+        }
+        stage('Integration Tests') {
+            steps {
+                echo "Integration Tests"
+                script {
+                        jslCustom.integrationTest()
+                }
+            }    
+        }
     }
 }
-
-
 """
-        
-def job = pipelineJob("${gConfig.job.name}");
+def job = pipelineJob("PROJECT_Feature_Build");
 
 job.with {
 
     parameters {
-    stringParam('branch_name','', 'name of the branch to build')
-    booleanParam('common', false)
-    booleanParam('common_client', false)
-    booleanParam('common_web', false)
-    booleanParam('common_test', false)
-    booleanParam('client', false)
-    booleanParam('client_test', false)
-    booleanParam('run_unit_tests', false)
+        stringParam('branch_name','', 'name of the branch to build')
     }
 
-    properties {
-        triggers {
-            genericTrigger {
-                genericVariables {
-                    genericVariable {
-                        key("action")
-                        value("\$.action")
-                        expressionType("JSONPath") //Optional, defaults to JSONPath
-                        regexpFilter("") //Optional, defaults to empty string
-                        defaultValue("") //Optional, defaults to empty string
-                    }
-                    genericVariable {
-                        key("commit_sha")
-                        value("\$.pull_request.head.sha")
-                        expressionType("JSONPath") //Optional, defaults to JSONPath
-                        regexpFilter("") //Optional, defaults to empty string
-                        defaultValue("") //Optional, defaults to empty string
-                    }
-                    genericVariable {
-                        key("pr_number")
-                        value("\$.number")
-                        expressionType("JSONPath") //Optional, defaults to JSONPath
-                        regexpFilter("") //Optional, defaults to empty string
-                        defaultValue("") //Optional, defaults to empty string
-                    }
-                    genericVariable {
-                        key("pr_title")
-                        value("\$.pull_request.title")
-                        expressionType("JSONPath") //Optional, defaults to JSONPath
-                        regexpFilter("") //Optional, defaults to empty string
-                        defaultValue("") //Optional, defaults to empty string
-                    }
-                    genericVariable {
-                        key("commits_url")
-                        value("\$.pull_request.commits_url")
-                        expressionType("JSONPath") //Optional, defaults to JSONPath
-                        regexpFilter("") //Optional, defaults to empty string
-                        defaultValue("") //Optional, defaults to empty string
-                    }
-                }
-                //                genericRequestVariables {
-                //                    genericRequestVariable {
-                //                        key("requestParameterName")
-                //                        regexpFilter("")
-                //                    }
-                //                }
-                //                genericHeaderVariables {
-                //                    genericHeaderVariable {
-                //                        key("requestHeaderName")
-                //                        regexpFilter("")
-                //                    }
-                //                }
-                token('JENKINS_AUTH_TOKEN')
-                printContributedVariables(true)
-                printPostContent(true)
-                silentResponse(false)
-                regexpFilterText("\$action")
-                regexpFilterExpression("^(opened|reopened|synchronize)\$")
-            }
-        }
-    }
-
+    authenticationToken('JENKINS_AUTH_TOKEN')
+        
     definition {
-        cps { 
+        cps {
             script(scripts)
+            sandbox()
         }
-    } 
+    }
 }  
