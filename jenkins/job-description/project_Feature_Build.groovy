@@ -45,7 +45,7 @@ def jslGit        = lib.de.allianz.bdo.pipeline.JSLGit.new()
 def jslMaven      = lib.de.allianz.bdo.pipeline.JSLMaven.new()
 def jslGhe        = lib.de.allianz.bdo.pipeline.JSLGhe.new()
 
-def jslCustom     = customLib.de.allianz.CAMEL_CASE_PROJECT.new()
+def jslCustom     = customLib.de.allianz.CAMEL_CASE.new()
 
 def jslAppGeneral = customLib.de.allianz.app.BuildGeneral.new()
 
